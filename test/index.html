@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genesis Blueprint: Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        main {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100dvw;
+            height: 100dvh;
+            pointer-events: none;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Estilização principal do formulário */
+        #config {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            /* Posição inicial */
+
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            /* Espaçamento entre os grupos de controle */
+
+            width: 350px;
+            pointer-events: auto;
+            /* Largura definida para o painel */
+
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            /* Cantos arredondados */
+
+            background-color: #fff;
+            /* Fundo branco para destaque */
+
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            /* Sombra suave */
+
+            transition: height 0.3s ease, width 0.3s ease, opacity 0.3s;
+            overflow: hidden;
+        }
+
+        /* Quando a classe 'minimized' estiver ativa: */
+        #config.minimized {
+            /* Reduz a largura para caber apenas o título se quiser, 
+       ou mantenha fixo. Aqui deixarei ajustar ao conteúdo do cabeçalho */
+            width: auto;
+            min-width: 150px;
+            height: auto;
+            padding-bottom: 10px;
+            /* Ajuste fino */
+        }
+
+        /* Esconde os grupos de controle quando minimizado */
+        #config.minimized .control-group {
+            display: none;
+        }
+
+        /* Ajusta o cabeçalho quando minimizado para ficar centralizado */
+        #config.minimized #title {
+            margin-bottom: 0;
+            align-items: center;
+        }
+
+        #config>label[for="config"] {
+            display: flex;
+            flex-direction: row;
+        }
+
+        /* Título principal do painel (Configuration) */
+        #config>label[for="config"] h3 {
+            font-family: sans-serif;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        #config>label[for="config"] button {
+            padding: 4px 8px;
+            margin-right: 5px;
+            height: 50%;
+        }
+
+        /* Estilo para cada grupo de controles (ex: Aceleration) */
+        .control-group {
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+
+        /* Título do grupo (Aceleration) */
+        .control-group .group-title {
+            font-weight: bold;
+            color: #007bff;
+            /* Cor de destaque azul */
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            /* Para garantir que o título ocupe a linha inteira */
+            font-size: 1.1em;
+        }
+
+        .group-title .reset-button {
+            float: right;
+            /* Posiciona o botão à direita */
+            padding: 0px 4px;
+            margin: 2px;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        /* Alinhamento de cada par (X: Input) */
+        .control-pair {
+            display: flex;
+            align-items: center;
+            /* Alinha o texto X: com o centro do slider */
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        /* Rótulos dos inputs (X: e Y:) e Valores Numéricos */
+        .control-pair label,
+        .control-pair span {
+            font-weight: 500;
+            color: #555;
+            text-align: right;
+            font-family: monospace;
+            /* Fonte monoespaçada para letras de variável */
+        }
+
+        /* Ajuste específico para o LABEL (lado esquerdo) */
+        .control-pair label {
+            min-width: 20px;
+            /* Garante alinhamento mínimo para X e Y */
+            white-space: nowrap;
+            /* Impede que rótulos maiores quebrem linha */
+        }
+
+        /* Ajuste específico para o VALOR (lado direito) - CORREÇÃO AQUI */
+        .control-pair span {
+            width: 40px;
+            /* Aumentado para 40px para caber 3+ dígitos (ex: -10.0) */
+            display: inline-block;
+            /* Garante que o width seja respeitado */
+        }
+
+        /* Estilização dos indicadores de contagem */
+        .status-display {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            gap: 10px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px 10px;
+            flex-grow: 1;
+            font-size: 0.9em;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .status-value {
+            font-weight: bold;
+            color: #007bff;
+            /* Azul padrão do tema */
+            font-family: monospace;
+        }
+
+        /* Estilização do Select (Dropdown) */
+        select#select-type {
+            flex-grow: 1;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #fff;
+            color: #333;
+            font-size: 0.9em;
+            cursor: pointer;
+            outline: none;
+        }
+
+        select#select-type:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 3px rgba(0, 123, 255, 0.3);
+        }
+
+        /* Estilo dos inputs tipo range */
+        input[type="range"] {
+            flex-grow: 1;
+            /* Faz o slider ocupar o espaço restante */
+            height: 5px;
+            /* Altura da barra */
+            -webkit-appearance: none;
+            appearance: none;
+            background: #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        /* Estilo do polegar (o círculo/quadrado que você arrasta) no input range */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #007bff;
+            /* Cor azul de destaque */
+            cursor: pointer;
+            box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 1. Estilização do botão de Minimizar */
+        .minimize {
+            background-color: #ff5f57;
+            /* Vermelho suave estilo Mac */
+            border: none;
+            border-radius: 50%;
+            /* Bolinha */
+            width: 24px;
+            height: 24px;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s, transform 0.2s;
+            margin-right: 10px;
+            /* Espaço entre botão e título */
+        }
+
+        .minimize:hover {
+            background-color: #e0443e;
+            transform: scale(1.1);
+        }
+
+        /* 2. Estilização dos botões de Reset (R) */
+        .reset-button {
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .reset-button:hover {
+            background-color: #e2e6ea;
+            color: #007bff;
+            border-color: #007bff;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas"></canvas>
+    <main>
+        <div id="config">
+            <label for="config" id="title">
+                <button class="minimize">-</button>
+                <h3>Configuration</h3>
+            </label>
+            <div class="control-group">
+                <label class="group-title">
+                    <p>general statuses</p>
+                    <button class="reset-button" id="reset-status">R</button>
+                </label>
+
+                <div class="status-display">
+                    <div class="status-item">
+                        <span>Balls:</span>
+                        <span id="count-balls" class="status-value">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span>Springs:</span>
+                        <span id="count-springs" class="status-value">0</span>
+                    </div>
+                </div>
+
+                <div class="control-pair">
+                    <label for="select-type" style="width: auto; margin-right: 5px;">Type:</label>
+                    <select id="select-type">
+                        <option value="none">Nada</option>
+                        <option value="ball">Ball</option>
+                    </select>
+                </div>
+            </div>
+            <div class="control-group">
+                <label class="group-title">
+                    <p>Aceleration</p>
+                    <button class="reset-button" id="reset-aceleration">R</button>
+                </label>
+
+                <div class="control-pair">
+                    <label for="slide-acceleration-x">X:</label>
+                    <input type="range" id="slide-acceleration-x" min="-20" max="20" value="0" step="1">
+                    <span id="value-acceleration-x">0</span>
+                </div>
+
+                <div class="control-pair">
+                    <label for="slide-acceleration-y">Y:</label>
+                    <input type="range" id="slide-acceleration-y" min="-20" max="20" value="0" step="1">
+                    <span id="value-acceleration-y">0</span>
+                </div>
+            </div>
+            <div class="control-group">
+                <label class="group-title">
+                    <p>Material Properties</p>
+                    <button class="reset-button" id="reset-material-properties">R</button>
+                </label>
+
+                <div class="control-pair">
+                    <label for="slide-mass">Mass:</label>
+                    <input type="range" id="slide-mass" min="1" max="10" value="1" step="1">
+                    <span id="value-mass">1</span>
+                </div>
+
+                <div class="control-pair">
+                    <label for="slide-friction">Friction:</label>
+                    <input type="range" id="slide-friction" min="0" max=".1" value=".001" step=".001">
+                    <span id="value-friction">0.001</span>
+                </div>
+
+                <div class="control-pair">
+                    <label for="slide-restitutio">Restitutio:</label>
+                    <input type="range" id="slide-restitutio" min="0" max="1" value=".9" step=".1">
+                    <span id="value-restitutio">0.9</span>
+                </div>
+
+                <div class="control-pair">
+                    <label for="slide-radius">Radius:</label>
+                    <input type="range" id="slide-radius" min="1" max="10" value="5" step="1">
+                    <span id="value-radius">5</span>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script>
+        // Seleciona os elementos
+        const configDiv = document.getElementById('config');
+        const minimizeBtn = configDiv.querySelector('.minimize');
+
+        // Função para alternar o estado
+        minimizeBtn.addEventListener('click', (e) => {
+            // Previne comportamento padrão se necessário (ex: submit de form)
+            e.preventDefault();
+
+            // Alterna a classe no CSS
+            configDiv.classList.toggle('minimized');
+
+            // Verifica se está minimizado para trocar o ícone/texto
+            if (configDiv.classList.contains('minimized')) {
+                minimizeBtn.textContent = '+'; // Vira um mais
+                minimizeBtn.style.backgroundColor = '#28c940'; // Verde para expandir (opcional)
+            } else {
+                minimizeBtn.textContent = '-'; // Vira um menos
+                minimizeBtn.style.backgroundColor = '#ff5f57'; // Vermelho para minimizar
+            }
+        });
+
+        // (Opcional) Lógica para os botões de Reset
+        // Exemplo genérico para demonstrar a interatividade
+        const resetButtons = document.querySelectorAll('.reset-button');
+        resetButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                console.log('Reset clicado:', btn.id);
+                // Aqui você colocaria a lógica para resetar os valores dos inputs
+            });
+        });
+    </script>
+    <script src="Objects.js"></script>
+    <script src="main.js"></script>
+</body>
+
+</html>
