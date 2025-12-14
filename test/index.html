@@ -164,13 +164,14 @@
         /* Estilização dos indicadores de contagem */
         .status-display {
             display: flex;
-            justify-content: space-between;
+            flex-wrap: wrap;
             margin-bottom: 15px;
             gap: 10px;
         }
 
         .status-item {
             display: flex;
+            flex: 0 1 calc(50% - 5px);
             align-items: center;
             justify-content: space-between;
             background-color: #f8f9fa;
@@ -292,11 +293,23 @@
             </label>
             <div class="control-group">
                 <label class="group-title">
-                    <p>general statuses</p>
+                    <p>General statuses</p>
                     <button class="reset-button" id="reset-status">R</button>
                 </label>
 
                 <div class="status-display">
+                    <div class="status-item">
+                        <span>FPS:</span>
+                        <span id="count-fps" class="status-value">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span>CPU:</span>
+                        <span id="count-cpu" class="status-value">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span>RAM:</span>
+                        <span id="count-ram" class="status-value">0</span>
+                    </div>
                     <div class="status-item">
                         <span>Balls:</span>
                         <span id="count-balls" class="status-value">0</span>

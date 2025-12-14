@@ -19,6 +19,8 @@ resize();
 /// Global Consts
 //
 const dt = 1 / 15; // 15fps
+const ballHash = new SpatialHash(50);
+const springHash = new SpatialHash(1000);
 //
 /// GUI Elements
 //
@@ -106,6 +108,10 @@ const displayRestitutio = document.getElementById('value-restitutio');
 const displayRadius = document.getElementById('value-radius');
 const displayCountBalls = document.getElementById('count-balls');
 const displayCountSprings = document.getElementById('count-springs');
+const displayCountFPS = document.getElementById('count-fps');
+const displayCountCPU = document.getElementById('count-cpu');
+const displayCountRAM = document.getElementById('count-ram');
+let lastTime = 0;
 //
 /// GameObjects
 //
@@ -119,7 +125,7 @@ let balls = [
     new Circle(canvas.width / 2 - d, canvas.height / 2 + d, 5, 'white'),
 
     // rope
-    new Circle(canvas.width / 1.5, canvas.height / 2, 5, 'white', stroke = null, mass = 1, friction = .001, restitution = .9, canCollide = false, canMove = false),
+    new Circle(canvas.width / 1.5, canvas.height / 2, 5, 'white', stroke = null, mass = 1, friction = .001, restitution = .9, canCollide = true, canMove = false),
     new Circle(canvas.width / 1.5, canvas.height / 2 + d, 5, 'white'),
     new Circle(canvas.width / 1.5, canvas.height / 2 + d * 2, 5, 'white'),
     new Circle(canvas.width / 1.5, canvas.height / 2 + d * 3, 5, 'white'),
@@ -137,7 +143,7 @@ let springs = [
     new Spring(balls[1], balls[3]),
 
     // rope
-    new Spring(balls[4], balls[5]),
+    new Spring(balls[4], balls[5], null, 1, 1),
     new Spring(balls[5], balls[6]),
     new Spring(balls[6], balls[7]),
 
@@ -154,8 +160,24 @@ let springs = [
 //
 /// Main loop
 //
-function loop() {
+function loop(time) {
+    // 1. REGISTRA O INÍCIO DA EXECUÇÃO DO CÓDIGO JS
+    frameStartTime = performance.now();
+
+    if (lastTime) {
+        // CÁLCULO DE FPS (Correto, mantenha)
+        displayCountFPS.textContent = Math.round(1000 / (time - lastTime));
+    }
+
+    // 2. Seu código de simulação e renderização vai aqui
+    //
     /// Update loop
+    //
+    ballHash.clear();
+    springHash.clear();
+    // 1. Popula os hashes
+    for (let ball of balls) ballHash.insert(ball);
+    for (let spring of springs) springHash.insert({ x: spring.node1.x, y: spring.node1.y, ...spring });
     //
     // Update circle
     for (let ball of balls) {
@@ -170,7 +192,7 @@ function loop() {
         ball.radius = parseFloat(sliderRadius.value);
 
         // Physical management of the object
-        ball.simulation(springs, balls, dt);
+        ball.simulation(springHash, ballHash, dt);
     }
     for (let node of springs) node.simulate();
     /// Renderization loop
@@ -185,6 +207,37 @@ function loop() {
     for (const b of balls) b.draw(ctx);
     for (const n of springs) n.draw(ctx);
     //
+    /// Fim do seu código de simulação e renderização
+    //
+    //
+    // 3. CALCULA O TEMPO DE CPU
+    // O tempo decorrido desde o início da função (quão pesado foi o trabalho)
+    cpuTime = performance.now() - frameStartTime;
+
+    // 4. EXIBIÇÃO PRÁTICA DA CPU
+    // Exibe o tempo em milissegundos, limitando as casas decimais.
+    displayCountCPU.textContent = `${cpuTime.toFixed(2)} ms`;
+
+    lastTime = time;
+
+    // ... (Código de RAM e outras exibições)
+    // Verifica se a API está disponível
+    // Verifica se a API está disponível
+    if (window.performance && window.performance.memory) {
+        const memory = window.performance.memory;
+        const usedBytes = memory.usedJSHeapSize;
+        const totalBytes = memory.totalJSHeapSize;
+
+        // 1. CÁLCULO DA PORCENTAGEM DE USO DA RAM
+        let ramPercentage = 0;
+        if (totalBytes > 0) ramPercentage = (usedBytes / totalBytes) * 100;
+
+        // 2. FORMATAÇÃO DA PORCENTAGEM (arredondando para o número inteiro mais próximo)
+        const formattedPercentage = Math.round(ramPercentage);
+
+        // EXIBIÇÃO NO ELEMENTO
+        displayCountRAM.textContent = `${formattedPercentage}%`;
+    }
     requestAnimationFrame(loop);
 }
 //
@@ -221,7 +274,7 @@ document.getElementById('reset-status').addEventListener('click', function () {
         new Circle(canvas.width / 2 - d, canvas.height / 2 + d, 5, 'white'),
 
         // rope
-            new Circle(canvas.width / 1.5, canvas.height / 2, 5, 'white', stroke = null, mass = 1, friction = .001, restitution = .9, canCollide = false, canMove = false),
+        new Circle(canvas.width / 1.5, canvas.height / 2, 5, 'white', stroke = null, mass = 1, friction = .001, restitution = .9, canCollide = true, canMove = false),
         new Circle(canvas.width / 1.5, canvas.height / 2 + d, 5, 'white'),
         new Circle(canvas.width / 1.5, canvas.height / 2 + d * 2, 5, 'white'),
         new Circle(canvas.width / 1.5, canvas.height / 2 + d * 3, 5, 'white')
@@ -239,7 +292,7 @@ document.getElementById('reset-status').addEventListener('click', function () {
         new Spring(balls[1], balls[3]),
 
         // rope
-        new Spring(balls[4], balls[5]),
+        new Spring(balls[4], balls[5], null, 1, 1),
         new Spring(balls[5], balls[6]),
         new Spring(balls[6], balls[7]),
 
@@ -255,7 +308,7 @@ document.getElementById('reset-status').addEventListener('click', function () {
     ];
 });
 document.getElementById('reset-aceleration').addEventListener('click', function () { displayAcceleration.x.textContent = displayAcceleration.y.textContent = sliderAcceleration.x.value = sliderAcceleration.y.value = 0; });
-document.getElementById('reset-material-properties').addEventListener('click', function () { displayFriction.textContent = sliderFriction.value = .001; displayRestitutio.textContent = sliderRestitutio.value = .9; displayRadius.textContent = sliderRadius.value = 5; });
+document.getElementById('reset-material-properties').addEventListener('click', function () { displayMass.textContent = sliderMass.value = 1; displayFriction.textContent = sliderFriction.value = .001; displayRestitutio.textContent = sliderRestitutio.value = .9; displayRadius.textContent = sliderRadius.value = 5; });
 //
 /// Start loop
 //
