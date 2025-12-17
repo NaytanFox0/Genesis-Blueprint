@@ -28,8 +28,11 @@ app.use(express.static(path.join(__dirname, 'test')));
 /// routes
 //
 // Rota raiz - Renderiza a página inicial
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'index.html'));
+app.get('/0', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views', '0/index.html'));
+});
+app.get('/1', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views', '1/index.html'));
 });
 
 /// erros-routes

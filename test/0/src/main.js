@@ -18,8 +18,7 @@ resize();
 //
 /// Global Consts
 //
-const dt = 1 / 15; // 15fps
-const ballHash = new SpatialHash(50);
+const ballHash = new SpatialHash(40);
 const springHash = new SpatialHash(1000);
 //
 /// GUI Elements
@@ -116,23 +115,23 @@ let lastTime = 0;
 /// GameObjects
 //
 // Create circle
-d = 30
+d = 30;
+const M = Math.min(canvas.width, canvas.height) / 5; //
 let balls = [
     // box
-    new Circle(canvas.width / 2 - d, canvas.height / 2 - d, 5, 'white'),
-    new Circle(canvas.width / 2 + d, canvas.height / 2 - d, 5, 'white'),
-    new Circle(canvas.width / 2 + d, canvas.height / 2 + d, 5, 'white'),
-    new Circle(canvas.width / 2 - d, canvas.height / 2 + d, 5, 'white'),
+    new Circle(canvas.width / 2 - d, canvas.height / 2 - d, 3, 'white'),
+    new Circle(canvas.width / 2 + d, canvas.height / 2 - d, 3, 'white'),
+    new Circle(canvas.width / 2 + d, canvas.height / 2 + d, 3, 'white'),
+    new Circle(canvas.width / 2 - d, canvas.height / 2 + d, 3, 'white'),
 
     // rope
-    new Circle(canvas.width / 1.5, canvas.height / 2, 5, 'white', stroke = null, mass = 1, friction = .001, restitution = .9, canCollide = true, canMove = false),
-    new Circle(canvas.width / 1.5, canvas.height / 2 + d, 5, 'white'),
-    new Circle(canvas.width / 1.5, canvas.height / 2 + d * 2, 5, 'white'),
+    new Circle(canvas.width / 1.5, canvas.height / 2, 3, 'white', stroke = null, mass = 1, friction = .001, restitution = .9, canCollide = true, canMove = false),
+    new Circle(canvas.width / 1.5, canvas.height / 2 + d, 3, 'white'),
+    new Circle(canvas.width / 1.5, canvas.height / 2 + d * 2, 3, 'white'),
     new Circle(canvas.width / 1.5, canvas.height / 2 + d * 3, 5, 'white'),
 ];
 //
 // Make nodes
-const M = Math.min(canvas.width, canvas.height) / 5; //
 let springs = [
     // box
     new Spring(balls[0], balls[1]),
@@ -148,14 +147,14 @@ let springs = [
     new Spring(balls[6], balls[7]),
 
     // Walls (Barreiras)
-    new Spring(new Circle(M, 0, stroke = { color: 'red', width: 4 }), new Circle(canvas.width - M, 0, stroke = { color: 'red', width: 4 })),
-    new Spring(new Circle(canvas.width - M, 0, stroke = { color: 'red', width: 4 }), new Circle(canvas.width, M, stroke = { color: 'red', width: 4 })),
-    new Spring(new Circle(canvas.width, M, stroke = { color: 'red', width: 4 }), new Circle(canvas.width, canvas.height - M, stroke = { color: 'red', width: 4 })),
-    new Spring(new Circle(canvas.width, canvas.height - M, stroke = { color: 'red', width: 4 }), new Circle(canvas.width - M, canvas.height, stroke = { color: 'red', width: 4 })),
-    new Spring(new Circle(canvas.width - M, canvas.height, stroke = { color: 'red', width: 4 }), new Circle(M, canvas.height, stroke = { color: 'red', width: 4 })),
-    new Spring(new Circle(M, canvas.height, stroke = { color: 'red', width: 4 }), new Circle(0, canvas.height - M, stroke = { color: 'red', width: 4 })),
-    new Spring(new Circle(0, canvas.height - M, stroke = { color: 'red', width: 4 }), new Circle(0, M, stroke = { color: 'red', width: 4 })),
-    new Spring(new Circle(0, M, stroke = { color: 'red', width: 4 }), new Circle(M, 0, stroke = { color: 'red', width: 4 }))
+    new Spring(new Circle(M, 0), new Circle(canvas.width - M, 0)),
+    new Spring(new Circle(canvas.width - M, 0), new Circle(canvas.width, M)),
+    new Spring(new Circle(canvas.width, M), new Circle(canvas.width, canvas.height - M)),
+    new Spring(new Circle(canvas.width, canvas.height - M), new Circle(canvas.width - M, canvas.height)),
+    new Spring(new Circle(canvas.width - M, canvas.height), new Circle(M, canvas.height)),
+    new Spring(new Circle(M, canvas.height), new Circle(0, canvas.height - M)),
+    new Spring(new Circle(0, canvas.height - M), new Circle(0, M)),
+    new Spring(new Circle(0, M), new Circle(M, 0))
 ];
 //
 /// Main loop
@@ -168,6 +167,7 @@ function loop(time) {
         // CÁLCULO DE FPS (Correto, mantenha)
         displayCountFPS.textContent = Math.round(1000 / (time - lastTime));
     }
+    let dt = (time - lastTime) / 1000;
 
     // 2. Seu código de simulação e renderização vai aqui
     //
@@ -189,10 +189,8 @@ function loop(time) {
         ball.friction = parseFloat(sliderFriction.value);
         ball.restitution = parseFloat(sliderRestitutio.value);
 
-        ball.radius = parseFloat(sliderRadius.value);
-
         // Physical management of the object
-        ball.simulation(springHash, ballHash, dt);
+        ball.simulation(springHash, ballHash, 1/15); // ou dt
     }
     for (let node of springs) node.simulate();
     /// Renderization loop
@@ -249,7 +247,7 @@ canvas.addEventListener('mousedown', (e) => {
 
     if (type === 'ball') {
         // Cria a bola na posição do clique usando o raio atual configurado no slider
-        const radius = parseFloat(sliderRadius.value) || 5;
+        const radius = parseFloat(sliderRadius.value);
         balls.push(new Circle(e.clientX, e.clientY, radius, 'white'));
     }
 });
@@ -268,15 +266,15 @@ document.getElementById('reset-status').addEventListener('click', function () {
     d = 30
     balls = [
         // box
-        new Circle(canvas.width / 2 - d, canvas.height / 2 - d, 5, 'white'),
-        new Circle(canvas.width / 2 + d, canvas.height / 2 - d, 5, 'white'),
-        new Circle(canvas.width / 2 + d, canvas.height / 2 + d, 5, 'white'),
-        new Circle(canvas.width / 2 - d, canvas.height / 2 + d, 5, 'white'),
+        new Circle(canvas.width / 2 - d, canvas.height / 2 - d, 3, 'white'),
+        new Circle(canvas.width / 2 + d, canvas.height / 2 - d, 3, 'white'),
+        new Circle(canvas.width / 2 + d, canvas.height / 2 + d, 3, 'white'),
+        new Circle(canvas.width / 2 - d, canvas.height / 2 + d, 3, 'white'),
 
         // rope
-        new Circle(canvas.width / 1.5, canvas.height / 2, 5, 'white', stroke = null, mass = 1, friction = .001, restitution = .9, canCollide = true, canMove = false),
-        new Circle(canvas.width / 1.5, canvas.height / 2 + d, 5, 'white'),
-        new Circle(canvas.width / 1.5, canvas.height / 2 + d * 2, 5, 'white'),
+        new Circle(canvas.width / 1.5, canvas.height / 2, 3, 'white', stroke = null, mass = 1, friction = .001, restitution = .9, canCollide = true, canMove = false),
+        new Circle(canvas.width / 1.5, canvas.height / 2 + d, 3, 'white'),
+        new Circle(canvas.width / 1.5, canvas.height / 2 + d * 2, 3, 'white'),
         new Circle(canvas.width / 1.5, canvas.height / 2 + d * 3, 5, 'white')
 
     ];
@@ -297,14 +295,14 @@ document.getElementById('reset-status').addEventListener('click', function () {
         new Spring(balls[6], balls[7]),
 
         // Walls (Barreiras)
-        new Spring(new Circle(M, 0, stroke = { color: 'red', width: 4 }), new Circle(canvas.width - M, 0, stroke = { color: 'red', width: 4 })),
-        new Spring(new Circle(canvas.width - M, 0, stroke = { color: 'red', width: 4 }), new Circle(canvas.width, M, stroke = { color: 'red', width: 4 })),
-        new Spring(new Circle(canvas.width, M, stroke = { color: 'red', width: 4 }), new Circle(canvas.width, canvas.height - M, stroke = { color: 'red', width: 4 })),
-        new Spring(new Circle(canvas.width, canvas.height - M, stroke = { color: 'red', width: 4 }), new Circle(canvas.width - M, canvas.height, stroke = { color: 'red', width: 4 })),
-        new Spring(new Circle(canvas.width - M, canvas.height, stroke = { color: 'red', width: 4 }), new Circle(M, canvas.height, stroke = { color: 'red', width: 4 })),
-        new Spring(new Circle(M, canvas.height, stroke = { color: 'red', width: 4 }), new Circle(0, canvas.height - M, stroke = { color: 'red', width: 4 })),
-        new Spring(new Circle(0, canvas.height - M, stroke = { color: 'red', width: 4 }), new Circle(0, M, stroke = { color: 'red', width: 4 })),
-        new Spring(new Circle(0, M, stroke = { color: 'red', width: 4 }), new Circle(M, 0, stroke = { color: 'red', width: 4 }))
+        new Spring(new Circle(M, 0), new Circle(canvas.width - M, 0)),
+        new Spring(new Circle(canvas.width - M, 0), new Circle(canvas.width, M)),
+        new Spring(new Circle(canvas.width, M), new Circle(canvas.width, canvas.height - M)),
+        new Spring(new Circle(canvas.width, canvas.height - M), new Circle(canvas.width - M, canvas.height)),
+        new Spring(new Circle(canvas.width - M, canvas.height), new Circle(M, canvas.height)),
+        new Spring(new Circle(M, canvas.height), new Circle(0, canvas.height - M)),
+        new Spring(new Circle(0, canvas.height - M), new Circle(0, M)),
+        new Spring(new Circle(0, M), new Circle(M, 0))
     ];
 });
 document.getElementById('reset-aceleration').addEventListener('click', function () { displayAcceleration.x.textContent = displayAcceleration.y.textContent = sliderAcceleration.x.value = sliderAcceleration.y.value = 0; });

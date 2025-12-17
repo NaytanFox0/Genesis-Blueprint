@@ -2,7 +2,8 @@
 //
 /// Utils
 //
-const dot = (ax, ay, bx, by) => ax * bx + ay * by;
+const dot = (ax, ay, bx, by) => ax * (bx || ax) + ay * (by || ay);
+const ndot = (ax, ay, bx, by) => ax * (bx || ax) - ay * (by || ay);
 //
 /// Objects Type
 //
@@ -47,13 +48,15 @@ class Circle {
         const nearbySprings = hashSprings.getNearby(this);
 
         // Calcula o número de passos baseado na velocidade e tamanho da esfera
-        let passos = Math.ceil(25 / Math.max(0.1, this.radius));
-        passos = Math.max(5, Math.min(passos, 50));// Limites de segurança: mínimo de 5 para estabilidade, máximo de 60 para performance
-
-        const dt_sub = dt / passos; // sub delta para sub passos
+        const passos = 10; // Exemplo: 10 sub-passos para cada frame.
+        const dt_sub = dt / passos;
 
         // Calcula a aceleração para o sub-passo garantindo que a esfera nao atravesse segmentos mesmo em alta velociade
         for (let i = 0; i < passos; i++) {
+            // --- 1. Armazena a posição antes do movimento do sub-passo ---
+            const x_antigo = this.x; // <--- NOVO
+            const y_antigo = this.y; // <--- NOVO
+
             // --- 1. Sub-Update (Aplicação da velocidade e aceleração para o sub-passo) ---
             // Neste modelo, assumimos que esta função avança o objeto
             if (this.canMove) {
@@ -64,7 +67,7 @@ class Circle {
             }
 
             // 2. Verifica a colisão
-            if (this.canCollide) for (let spring of nearbySprings) if (this != spring.node1 && this != spring.node2) this.resolveCollisionSpring(this.collideWithSpring(spring));
+            if (this.canCollide) for (let spring of nearbySprings) if (this != spring.node1 && this != spring.node2) this.collisionSpring(spring, x_antigo, y_antigo);
         }
 
         // Devolvae a aceleração orginal
@@ -79,146 +82,192 @@ class Circle {
                 this.resolveCollisionCircle(ball, this.collideWithCircle(ball));
             }
         }
+
+        // 4. Velocidade e Aceleração Limite (velocidade da luz)
+        this.ax = Math.max(-299792458, Math.min(299792458, this.ax));
+        this.ay = Math.max(-299792458, Math.min(299792458, this.ay));
+        this.vx = Math.max(-299792458, Math.min(299792458, this.vx));
+        this.vy = Math.max(-299792458, Math.min(299792458, this.vy));
     }
 
     // Trata a colição com segmento (Spring)
-    resolveCollisionSpring(collisionData) {
-        if (!collisionData.isColliding) return;
-        let spring = collisionData.spring;
+    collisionSpring(spring, x_antigo, y_antigo) {
+        // --- Dados do Segmento (Spring) ---
+        const length_x = spring.node2.x - spring.node1.x;
+        const length_y = spring.node2.y - spring.node1.y;
+        const length_sq = length_x * length_x + length_y * length_y;
+        if (length_sq === 0) return;
 
-        // 1. Reposicionamento do círculo
+        // --- 1. DETECÇÃO DE COLISÃO CONTÍNUA (CCD) ---
+
+        let is_ccd_hit = false;
+        let t_impacto = 1.0; // Ponto de impacto na trajetória (0 a 1)
+        let n_ccd_x = 0, n_ccd_y = 0; // Normal do CCD
+
+        // Vetor de Trajetória do sub-passo
+        const proj_x = this.x - x_antigo;
+        const proj_y = this.y - y_antigo;
+
+        // A. Testa a Interseção do Raio (pos_antigo -> pos_novo) com o Segmento
+        // (Apenas se o objeto tiver se movido o suficiente para justificar o CCD)
+        if (dot(proj_x, proj_y) > 0.0001) {
+            // Cálculo da Interseção (determinante)
+            // den = A x B, onde A é o segmento (-length_x, -length_y) e B é a trajetória (proj_x, proj_y)
+            const denom = (-length_x * proj_y) - (proj_x * -length_y);
+
+            if (Math.abs(denom) > 0.000001) {
+                // Vetor da Origem (Segmento.pa até Posição_Antiga)
+                const origin_x = x_antigo - spring.node1.x;
+                const origin_y = y_antigo - spring.node1.y;
+
+                // t (distância na trajetória) e s (distância no segmento)
+                // t = [(Origem.x * Seg.y) - (Origem.y * Seg.x)] / denom
+                const t = (origin_x * -length_y - origin_y * -length_x) / denom;
+                const s = (origin_x * -proj_y - origin_y * -proj_x) / denom;
+
+                // Colisão entre ponto-raio e segmento
+                if (t >= 0 && t <= 1 && s >= 0 && s <= 1) {
+
+                    // Se o centro do círculo colidir, recuamos pelo raio (Geração da Cápsula)
+                    const radius_sq = this.radius * this.radius;
+                    const radius_check_sq = dot(origin_x, origin_y);
+
+                    // Se o círculo não estava já colidido na origem E a trajetória cruzou
+                    if (radius_check_sq > radius_sq) {
+                        is_ccd_hit = true;
+                        t_impacto = t;
+
+                        // Normal do Segmento (perpendicular à linha)
+                        n_ccd_x = -length_y;
+                        n_ccd_y = length_x;
+                        const n_mag = Math.sqrt(dot(n_ccd_x, n_ccd_y));
+                        n_ccd_x /= n_mag;
+                        n_ccd_y /= n_mag;
+
+                        // Garante que a normal aponte contra a velocidade (essencial para ricochete)
+                        if (dot(this.vx, this.vy, n_ccd_x, n_ccd_y) > 0) {
+                            n_ccd_x = -n_ccd_x;
+                            n_ccd_y = -n_ccd_y;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 2. DETECÇÃO DISCRETA (DCD) E PREPARAÇÃO DA RESOLUÇÃO ---
+
+        let resolve_normal_x, resolve_normal_y;
+        let penetration;
+        let clamped_t; // Ponto no segmento (0 a 1)
+
+        if (is_ccd_hit) {
+            // Se houve CCD, usamos os dados do impacto
+            resolve_normal_x = n_ccd_x;
+            resolve_normal_y = n_ccd_y;
+
+            // Recua o objeto até o ponto de impacto do CCD
+            this.x = x_antigo + proj_x * t_impacto;
+            this.y = y_antigo + proj_y * t_impacto;
+
+            // Recalculamos o ponto mais próximo para obter 'clamped_t' e 'penetration' (que agora será o 'radius')
+            const t_num = dot((this.x - spring.node1.x), (this.y - spring.node1.y), length_x, length_y);
+            clamped_t = Math.max(0, Math.min(1, t_num / length_sq));
+
+            // Simplesmente assumimos penetração = raio (o objeto está tocando)
+            penetration = this.radius;
+
+        } else {
+            // Se não houve CCD, executamos a DCD tradicional (Closest Point)
+            const t_num = dot((this.x - spring.node1.x), (this.y - spring.node1.y), length_x, length_y);
+            clamped_t = Math.max(0, Math.min(1, t_num / length_sq));
+
+            const closest_x = spring.node1.x + clamped_t * length_x;
+            const closest_y = spring.node1.y + clamped_t * length_y;
+
+            const diff_x = closest_x - this.x;
+            const diff_y = closest_y - this.y;
+
+            const dist = Math.sqrt(dot(diff_x, diff_y));
+
+            if (!(dist < this.radius)) return; // Não houve colisão DCD, encerra.
+
+            // Vetor Normal
+            penetration = this.radius - dist;
+            resolve_normal_x = -diff_x / dist; // Normal que empurra para fora
+            resolve_normal_y = -diff_y / dist;
+        }
+
+        // --- 3. RESOLUÇÃO DE COLISÃO (ÚNICA) ---
+
+        // 3.1. Reposicionamento do círculo (Apenas se a DCD detectar penetração ou o CCD recuar para o ponto de contato)
         if (this.canMove) {
-            this.x += collisionData.normal.x * collisionData.penetration;
-            this.y += collisionData.normal.y * collisionData.penetration;
+            this.x += resolve_normal_x * penetration;
+            this.y += resolve_normal_y * penetration;
         }
 
-        // 2. Decomposição da velocidade
-        const speedAlongNormal = dot(this.vx, this.vy, collisionData.normal.x, collisionData.normal.y);
-        const speedAlongTangent = dot(this.vx, this.vy, -collisionData.normal.y, collisionData.normal.x);
-
-        // --- MUDANÇA AQUI: Não dê "return" global se speedAlongNormal >= 0 ---
-        // A resposta do círculo (3.2) só acontece se ele estiver se movendo contra a colisão
+        // 3.2. Decomposição da velocidade e Resposta do Círculo
+        
+        const speedAlongNormal = dot(this.vx, this.vy, resolve_normal_x, resolve_normal_y);
+        const speedAlongTangent = dot(this.vx, this.vy, -resolve_normal_y, resolve_normal_x);
         if (this.canMove && speedAlongNormal < 0) {
-            this.vx = -(speedAlongNormal * collisionData.normal.x) * (this.restitution) + (speedAlongTangent * -collisionData.normal.y) * (1 - this.friction);
-            this.vy = -(speedAlongNormal * collisionData.normal.y) * (this.restitution) + (speedAlongTangent * collisionData.normal.x) * (1 - this.friction);
+            const new_vx_normal = -(speedAlongNormal * resolve_normal_x) * this.restitution;
+            const new_vy_normal = -(speedAlongNormal * resolve_normal_y) * this.restitution;
+
+            const new_vx_tangent = (speedAlongTangent * -resolve_normal_y) * (1 - this.friction);
+            const new_vy_tangent = (speedAlongTangent * resolve_normal_x) * (1 - this.friction);
+
+            this.vx = new_vx_normal + new_vx_tangent;
+            this.vy = new_vy_normal + new_vy_tangent;
         }
 
-        // 3.3 Aplicar impulso aos nós
-        let t = collisionData.clamped_t;
-        const invMassTotal = (this.canMove ? (1 / this.mass) : 0) + ((1 - t) * (1 - t) * (1 / spring.node1.mass) + t * t * (1 / spring.node2.mass));
+        // 3.3. Aplicar Impulso aos nós do Spring (Segmento)
+        const invMassCircle = this.canMove ? (1 / this.mass) : 0;
+        const invMassSegment = (1 - clamped_t) * (1 - clamped_t) * (1 / spring.node1.mass) + clamped_t * clamped_t * (1 / spring.node2.mass);
+        const invMassTotal = invMassCircle + invMassSegment;
         if (invMassTotal <= 0) return;
 
-        // Determina a velocidade efetiva de impacto
-        let effectiveSpeed = speedAlongNormal;
+        // Velocidade relativa (V_c - V_spring)
+        const vSpringX = spring.node1.vx * (1 - clamped_t) + spring.node2.vx * clamped_t;
+        const vSpringY = spring.node1.vy * (1 - clamped_t) + spring.node2.vy * clamped_t;
+        let effectiveSpeed = speedAlongNormal - dot(vSpringX, vSpringY, resolve_normal_x, resolve_normal_y);
 
-        // Se o círculo está parado, precisamos checar a velocidade do Spring contra ele
-        const vSpringNormal = dot((spring.node1.vx + spring.node2.vx) * 0.5, (spring.node1.vy + spring.node2.vy) * 0.5, collisionData.normal.x, collisionData.normal.y);
-
-        if (!this.canMove) {
-            effectiveSpeed = -vSpringNormal; // Impacto é a velocidade do Spring vindo
-        } else {
-            // Se ambos se movem, a velocidade relativa real é a diferença
-            effectiveSpeed = speedAlongNormal - vSpringNormal;
-        }
-
-        // Só aplica impulso se houver aproximação entre os corpos
         if (effectiveSpeed >= 0) {
-            // Se não há aproximação, mas há penetração e o círculo é estático, 
-            // ainda precisamos reposicionar os nós para não atravessar
+            // Apenas reposiciona os nós se o círculo for estático e houver penetração
             if (!this.canMove) {
-                if (spring.node1.canMove) {
-                    spring.node1.x -= collisionData.normal.x * collisionData.penetration * (1 - t);
-                    spring.node1.y -= collisionData.normal.y * collisionData.penetration * (1 - t);
-                }
-                if (spring.node2.canMove) {
-                    spring.node2.x -= collisionData.normal.x * collisionData.penetration * t;
-                    spring.node2.y -= collisionData.normal.y * collisionData.penetration * t;
-                }
+                // ... [Lógica de reposicionamento dos nós do spring] ...
+                const factor1 = penetration * (1 - clamped_t);
+                const factor2 = penetration * clamped_t;
+                if (spring.node1.canMove) { spring.node1.x -= resolve_normal_x * factor1; spring.node1.y -= resolve_normal_y * factor1; }
+                if (spring.node2.canMove) { spring.node2.x -= resolve_normal_x * factor2; spring.node2.y -= resolve_normal_y * factor2; }
             }
             return;
         }
 
+        // Aplica Impulso
         const impulseMag = -(1 + this.restitution) * effectiveSpeed / invMassTotal;
 
-        if (spring.node1.canMove) {
-            spring.node1.vx -= impulseMag * collisionData.normal.x * (1 - t) * (1 / spring.node1.mass);
-            spring.node1.vy -= impulseMag * collisionData.normal.y * (1 - t) * (1 / spring.node1.mass);
+        // Impulso Círculo
+        if (this.canMove) {
+            const impulseCircle = impulseMag * invMassCircle;
+            this.vx -= impulseCircle * resolve_normal_x;
+            this.vy -= impulseCircle * resolve_normal_y;
+        }
 
-            if (!this.canMove) {
-                spring.node1.x -= collisionData.normal.x * collisionData.penetration * (1 - t);
-                spring.node1.y -= collisionData.normal.y * collisionData.penetration * (1 - t);
-            }
+        // Impulso Spring
+        const impulseFactor = impulseMag / invMassSegment;
+        if (spring.node1.canMove) {
+            const impulseN1 = impulseFactor * (1 - clamped_t) * (1 / spring.node1.mass);
+            spring.node1.vx -= impulseN1 * resolve_normal_x;
+            spring.node1.vy -= impulseN1 * resolve_normal_y;
+            if (!this.canMove) { spring.node1.x -= resolve_normal_x * penetration * (1 - clamped_t); spring.node1.y -= resolve_normal_y * penetration * (1 - clamped_t); }
         }
         if (spring.node2.canMove) {
-            spring.node2.vx -= impulseMag * collisionData.normal.x * t * (1 / spring.node2.mass);
-            spring.node2.vy -= impulseMag * collisionData.normal.y * t * (1 / spring.node2.mass);
-
-            if (!this.canMove) {
-                spring.node2.x -= collisionData.normal.x * collisionData.penetration * t;
-                spring.node2.y -= collisionData.normal.y * collisionData.penetration * t;
-            }
+            const impulseN2 = impulseFactor * clamped_t * (1 / spring.node2.mass);
+            spring.node2.vx -= impulseN2 * resolve_normal_x;
+            spring.node2.vy -= impulseN2 * resolve_normal_y;
+            if (!this.canMove) { spring.node2.x -= resolve_normal_x * penetration * clamped_t; spring.node2.y -= resolve_normal_y * penetration * clamped_t; }
         }
     }
-
-
-    // Detecta colisões com um segmento (Spring)
-    collideWithSpring(spring) {
-        // 1. Determina length entre dos segmentos (Spring)
-        const length_x = spring.node2.x - spring.node1.x;
-        const length_y = spring.node2.y - spring.node1.y;
-        const length_sq = dot(length_x, length_y, length_x, length_y);
-
-        // 2. Calcula a projeção da distancia do node1 ate o circle. 0 >= (this - spring.node1, length)/length_sq <= 1.
-        let clamped_t = 0;
-        if (length_sq !== 0) clamped_t = Math.max(0, Math.min(1, dot((this.x - spring.node1.x), (this.y - spring.node1.y), length_x, length_y) / length_sq));
-
-        // 3. Coordenadas do ponto mais próximo             (closest = Node1 + clamped_t * length)
-        // 4. Coordenadas do círculo ao ponto mais próximo  ( circle_closest = closest - this)
-        const circle_closest_x = (spring.node1.x + clamped_t * length_x) - this.x;
-        const circle_closest_y = (spring.node1.y + clamped_t * length_y) - this.y;
-
-        // 5. Distância (real) entre o centro do círculo e o ponto mais próximo.
-        const dist = Math.sqrt(dot(circle_closest_x, circle_closest_y, circle_closest_x, circle_closest_y));
-
-        // 6. Determinar a Colisão
-        // Colisão ocorre se a distância for menor que o raio
-        const isColliding = dist < this.radius;
-        if (!isColliding) return {
-            isColliding: false,
-            penetration: 0,
-            normal: { x: 0, y: 0 }
-        };
-
-        // 7. Detemina a normal
-        let normal_x, normal_y;
-        if (dist === 0) {
-            // Caso especial: o centro do círculo coincide com o ponto mais próximo.
-            // A normal é arbitrária. Usamos a normal do spring (linha infinita) como fallback.
-            const length = Math.sqrt(length_sq);
-            if (length !== 0) {
-                normal_x = -length_y / length;
-                normal_y = length_x / length;
-            } else {
-                // Se o spring não tem comprimento (node1 e node2 são o mesmo ponto),
-                // a normal é arbitrária.
-                normal_x = 0;
-                normal_y = -1; // Exemplo: apontando para cima
-            }
-        } else {
-            // A normal é o vetor normalizado do ponto mais próximo ao centro do círculo
-            // (que é a direção *oposta* de v_circle_to_closest).
-            normal_x = -circle_closest_x / dist;
-            normal_y = -circle_closest_y / dist;
-        }
-
-        return {
-            isColliding,
-            penetration: this.radius - dist,
-            normal: { x: normal_x, y: normal_y },
-            spring,
-            clamped_t
-        };
-    };
 
     // Trata a colição com circulo (Circle)
     resolveCollisionCircle(other, collisionData) {
@@ -299,6 +348,43 @@ class Circle {
         };
     };
 
+    getJSON() {
+        return {
+            type: "Circle",
+            x: this.x,
+            y: this.y,
+            vx: this.vx,
+            vy: this.vy,
+            ax: this.ax,
+            ay: this.ay,
+            radius: this.radius,
+            fill: this.fill,
+            stroke: this.stroke,
+            mass: this.mass,
+            friction: this.friction,
+            restitution: this.restitution,
+            canCollide: this.canCollide,
+            canMove: this.canMove
+        }
+    }
+
+    setFromJSON(data) {
+        this.x = data.x;
+        this.y = data.y;
+        this.vx = data.vx;
+        this.vy = data.vy;
+        this.ax = data.ax;
+        this.ay = data.ay;
+        this.radius = data.radius;
+        this.fill = data.fill;
+        this.stroke = data.stroke;
+        this.mass = data.mass;
+        this.friction = data.friction;
+        this.restitution = data.restitution;
+        this.canCollide = data.canCollide;
+        this.canMove = data.canMove;
+    }
+
     // Renderiza o Objeto
     draw(ctx) {
         if (this.fill) ctx.fillStyle = this.fill;
@@ -316,19 +402,6 @@ class Circle {
 
 //
 class Spring {
-    /** @type {Circle} */
-    node1;
-    /** @type {Circle} */
-    node2;
-    /** @type {number} */
-    length;
-    /** @type {number} */
-    stiffness; // Antigo "force" (K)
-    /** @type {number} */
-    damping;   // Novo amortecimento (b)
-    /** @type {number} */
-    thickness;
-
     constructor(node1, node2, length = null, stiffness = 0.5, damping = 0.5) {
         this.node1 = node1; // Objeto A
         this.node2 = node2; // Objeto B

@@ -18,18 +18,15 @@ const PORT = process.env.PORT || 3000; // Define a porta. Pega do ambiente (proc
 /// config
 //
 // Middleware para permitir que o Express entenda JSON no corpo das requisições (POST, PUT)
+app.use(express.static('public'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Middleware para permitir que o Express entenda dados de formulário (URL-encoded)
-
-// Configura o middleware para servir arquivos estáticos (CSS, JS, Imagens, etc.)
-// O caminho 'public' deve ser criado na raiz do seu projeto.
-app.use(express.static(path.join(__dirname, 'public')));
 
 /// routes
 //
 // Rota raiz - Renderiza a página inicial
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'index.html'));
+    res.sendFile(path.join(__dirname, 'views', 'public/index.html'));
 });
 
 /// erros-routes
