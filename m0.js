@@ -1,54 +1,118 @@
-// Testing Class Otimization
+/// Testing Class Otimization
 const inicial = process.memoryUsage().heapUsed;
 
-class Particle {
-    constructor({ pos, speed, mass, friction, restitution, radius, fill, stroke, config }) {
-        // Motion properties
-        this.motion = [pos?.x, pos?.y, speed?.x, speed?.y] ?? [0, 0, 0, 0];
-
-        // Physical properties
-        this.physical = [mass, friction, restitution] ?? [1, .001, .9];
-
-        // Visual properties
-        this.radius = radius ?? 10;
-        this.style = [fill, stroke?.color, stroke?.length] || [0xffffffff, 0x000000ff, 1];
-
-        // Configuration
-        this.status = [config?.isStatic, config?.isSensor] ?? [false, false];
-    }
-
-    apllyForce(fx, fy, dt) {
-        // Update speed based on applied force
-        if (!this.status[0]) {
-            this.motion[2] += fx * dt;
-            this.motion[3] += fy * dt;
+/// Gerenciador de Particulas
+//
+class ParticleSystem {
+    constructor(length) {
+        this.count = 0;
+        this.length = length ?? 1;
+        this.buffer = {
+            x: new Float32Array(this.length),
+            y: new Float32Array(this.length),
+            vx: new Float32Array(this.length),
+            vy: new Float32Array(this.length),
+            mass: new Float32Array(this.length),
+            friction: new Float32Array(this.length),
+            restitution: new Float32Array(this.length),
+            radius: new Float32Array(this.length),
+            fill: new Uint32Array(this.length),
+            stroke: new Uint32Array(this.length),
+            sLength: new Float32Array(this.length),
+            config: new Uint8Array(this.length),
         }
     }
 
-    update(dt) {
-        // Update position based on speed
-        if (!this.status[0]) {
-            this.motion[0] += this.motion[2] * dt;
-            this.motion[1] += this.motion[3] * dt;
+    // Redimenciona Buffers
+    resize() {
+        this.length *= (this.length > 1024 ? 1.5 : 2); // atualizar o comprimento dos arrays
+        this.buffer = {
+            x: new Float32Array(this.length),
+            y: new Float32Array(this.length),
+            vx: new Float32Array(this.length),
+            vy: new Float32Array(this.length),
+            mass: new Float32Array(this.length),
+            friction: new Float32Array(this.length),
+            restitution: new Float32Array(this.length),
+            radius: new Float32Array(this.length),
+            fill: new Uint32Array(this.length),
+            stroke: new Uint32Array(this.length),
+            sLength: new Float32Array(this.length),
+            config: new Uint8Array(this.length),
         }
+    }
+
+    // Adiciona um Novo Objeto
+    push({ pos, speed, mass, friction, restitution, radius, fill, stroke, config }) {
+        this.count++; // Nova quantidade de objetos
+        if (this.count > this.length) this.resize(); // Redimenciona caso tenha mais objetos que o suportado
+
+        // Cria novo objeto => (0 + 1) - 1 => 0 => primeiro objeto
+        const offset = this.count - 1;
+        this.buffer.x[offset] = pos?.x || 0;
+        this.buffer.y[offset] = pos?.y || 0;
+        this.buffer.vx[offset] = speed?.x || 0;
+        this.buffer.vy[offset] = speed?.y || 0;
+        this.buffer.mass[offset] = mass ?? 1;
+        this.buffer.friction[offset] = friction ?? .001;
+        this.buffer.restitution[offset] = restitution ?? .9;
+        this.buffer.radius[offset] = radius ?? 5;
+        this.buffer.fill[offset] = fill || 0xffffffff;
+        this.buffer.stroke[offset] = stroke?.color || 0x000000ff;
+        this.buffer.sLength[offset] = stroke?.length || 1;
+        this.buffer.config[offset] = config || 0x00;
+    }
+
+    // STATIC (Bit 0 / Valor 1)
+    getIsStatic(id) { return (this.buffer.config[id] & 1) !== 0; }
+    setIsStatic(id, v) {
+        if (v) this.buffer.config[id] |= 1;  // Liga o bit 0
+        else this.buffer.config[id] &= ~1;  // Desliga o bit 0
+    }
+
+    // SENSOR (Bit 1 / Valor 2)
+    getIsSensor(id) { return (this.buffer.config[id] & 2) !== 0; }
+    setIsSensor(id, v) {
+        if (v) this.buffer.config[id] |= 2;  // Liga o bit 1
+        else this.buffer.config[id] &= ~2;  // Desliga o bit 1
+    }
+
+    // Aplica Força a um objeto com base força * tempo
+    apllyForce(id, fx, fy, dt) {
+        if (this.getIsStatic(id)) return;
+        this.buffer.vx[id] += fx * dt;
+        this.buffer.vy[id] += fy * dt; 
+    }
+    
+    // Atualiza posição com base na velocidade * tempo
+    update(id, dt) {
+        if (this.getIsStatic(id)) return;
+        this.buffer.x[id] += this.buffer.vx[id] * dt;
+        this.buffer.y[id] += this.buffer.vy[id] * dt; 
+    }
+
+    // Executa Apenas as particulas existentes
+    forEach(action = (id) => null) {
+        for (let i = 0; i < this.count; i++) action(i);
     }
 }
 
 // Simulando 1 frame
-let particles = Array.from({ length: 10000 }, () => new Particle({})); // gerando n conteudo
+const particles = new ParticleSystem(100000); // geran 0 particulas && Grenciador de Particulas
 const dt = .0016;
 
 console.time('[time]');
 
-particles.push(new Particle({}));
-particles.filter((_) => {
-    _.apllyForce(0, 0, dt)
-    _.update(dt);
+particles.push({});
+particles.forEach((_) => {
+    particles.apllyForce(_, 0, 0, dt)
+    particles.update(_, dt);
+}); // 1.ms/+
 
-    return (_.motion[0] > 0 - _.radius && _.motion[1] > 0 - _.radius);
-});
-
-console.timeEnd('[time]'); // ~.6-.7 ms
+console.timeEnd('[time]');
 console.log(`[memory]: ${((process.memoryUsage().heapUsed - inicial) / 10000).toFixed(1)} bytes`);
+console.log(`[count]: ${particles.count}/${particles.length}`);
 
-// ~30 ms | ~450 bytes | -Complexo
+
+// -30/40 ms Caso nao 'existam ~10k/+' particulas 
+// ~30/40 ms | ~1.5 bytes | -Complexo
