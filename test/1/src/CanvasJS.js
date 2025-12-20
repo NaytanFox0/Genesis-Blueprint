@@ -13,7 +13,7 @@ function loadShader(url) {
     }
 }
 //
-/// Program Creation
+/// Create program
 function program(gl, vSrc, fSrc) {
     const p = gl.createProgram();
     [gl.VERTEX_SHADER, gl.FRAGMENT_SHADER].forEach((tipo, i) => {
@@ -36,7 +36,13 @@ function program(gl, vSrc, fSrc) {
     return p;
 }
 //
-/// Hex to RGBA
+/// Create attribute 
+function attribute(gl, ext, prog, data) {
+    const att = gl.getAttribLocation(prog, data.name);
+    gl.enableVertexAttribArray(att);
+    gl.vertexAttribPointer(att, data.amount ?? 1, data.type, data.norm ?? false, data.stride, data.offset);
+    if (ext) ext.vertexAttribDivisorANGLE(att, data.divisor ?? 0);
+}
 //
 /// Class Definition
 class CanvasJS extends HTMLCanvasElement {
@@ -56,18 +62,20 @@ class CanvasJS extends HTMLCanvasElement {
         this.ctx.enable(this.ctx.BLEND);
         this.ctx.blendFunc(this.ctx.SRC_ALPHA, this.ctx.ONE_MINUS_SRC_ALPHA, this.ctx.ONE, this.ctx.ONE_MINUS_SRC_ALPHA);
 
+        /// Load Shaders
         const vShaderSrc = loadShader('./src/vShaderSrc.glsl');
         const fShaderSrc = loadShader('./src/fShaderSrc.glsl');
 
-        // Create and use program
+        /// Create and use program
         const prog = program(this.ctx, vShaderSrc, fShaderSrc);
         this.ctx.useProgram(prog);
 
-        // 
+        /// 
         this.ext = this.ctx.getExtension('ANGLE_instanced_arrays');
         if (!this.ext) throw new Error("Instancing not supported");
 
-        // Create buffer
+        /// Vertex Attribute
+        //
         const buffer = this.ctx.createBuffer();
         this.ctx.bindBuffer(this.ctx.ARRAY_BUFFER, buffer);
         const vertices = new Float32Array([
@@ -75,55 +83,77 @@ class CanvasJS extends HTMLCanvasElement {
             -1, 1, 1, -1, 1, 1
         ]);
         this.ctx.bufferData(this.ctx.ARRAY_BUFFER, vertices, this.ctx.STATIC_DRAW);
+        //
+        attribute(this.ctx, false, prog, {
+            name:'a_position',
+            amount: 2, 
+            type: this.ctx.FLOAT,
+            stride: 0,
+            offset: 0
+        });
 
-        // Link attributes
-        const aPos = this.ctx.getAttribLocation(prog, "a_position");
-        this.ctx.enableVertexAttribArray(aPos);
-        this.ctx.vertexAttribPointer(aPos, 2, this.ctx.FLOAT, false, 0, 0);
-
+        /// Instance Attribute
+        //
         this.instanceBuffer = this.ctx.createBuffer();
         this.ctx.bindBuffer(this.ctx.ARRAY_BUFFER, this.instanceBuffer);
-
-        //
         const stride = 24;
-
+        //
         // Atributo: a_pos (vec2)
-        const a_posLoc = this.ctx.getAttribLocation(prog, "a_pos");
-        this.ctx.enableVertexAttribArray(a_posLoc);
-        this.ctx.vertexAttribPointer(a_posLoc, 2, this.ctx.FLOAT, false, stride, 0);
-        this.ext.vertexAttribDivisorANGLE(a_posLoc, 1); // Muda 1 vez por instância
+        attribute(this.ctx, this.ext, prog, {
+            name:'a_pos',
+            amount: 2, 
+            type: this.ctx.FLOAT,
+            stride: stride,
+            offset: 0,
+            divisor: 1
+        });
 
         // Atributo: a_radius (float)
-        const a_radLoc = this.ctx.getAttribLocation(prog, "a_radius");
-        this.ctx.enableVertexAttribArray(a_radLoc);
-        this.ctx.vertexAttribPointer(a_radLoc, 1, this.ctx.FLOAT, false, stride, 8); // offset 8
-        this.ext.vertexAttribDivisorANGLE(a_radLoc, 1);
+        attribute(this.ctx, this.ext, prog, {
+            name:'a_radius',
+            type: this.ctx.FLOAT,
+            stride: stride,
+            offset: 8,
+            divisor: 1
+        });
 
         // Atributo: a_strokeWidth (float)
-        const a_stkLoc = this.ctx.getAttribLocation(prog, "a_strokeWidth");
-        this.ctx.enableVertexAttribArray(a_stkLoc);
-        this.ctx.vertexAttribPointer(a_stkLoc, 1, this.ctx.FLOAT, false, stride, 12); // offset 12
-        this.ext.vertexAttribDivisorANGLE(a_stkLoc, 1);
+        attribute(this.ctx, this.ext, prog, {
+            name:'a_strokeWidth',
+            type: this.ctx.FLOAT,
+            stride: stride,
+            offset: 12,
+            divisor: 1
+        });
 
         // Atributo: a_fillColor (vec4)
-        const a_fillLoc = this.ctx.getAttribLocation(prog, "a_fillColor");
-        this.ctx.enableVertexAttribArray(a_fillLoc);
-        this.ctx.vertexAttribPointer(a_fillLoc, 4, this.ctx.UNSIGNED_BYTE, true, stride, 16); // offset 16
-        this.ext.vertexAttribDivisorANGLE(a_fillLoc, 1);
+        attribute(this.ctx, this.ext, prog, {
+            name:'a_fillColor',
+            amount: 4,
+            type: this.ctx.UNSIGNED_BYTE,
+            norm: true,
+            stride: stride,
+            offset: 16,
+            divisor: 1
+        });
 
-        const a_strkCLoc = this.ctx.getAttribLocation(prog, "a_strokeColor");
-        this.ctx.enableVertexAttribArray(a_strkCLoc);
-        this.ctx.vertexAttribPointer(a_strkCLoc, 4, this.ctx.UNSIGNED_BYTE, true, stride, 20); // Offset 32
-        this.ext.vertexAttribDivisorANGLE(a_strkCLoc, 1);
+        // Atributo: a_strokeColor (vec4)
+        attribute(this.ctx, this.ext, prog, {
+            name:'a_strokeColor',
+            amount: 4,
+            type: this.ctx.UNSIGNED_BYTE,
+            norm: true,
+            stride: stride,
+            offset: 20,
+            divisor: 1
+        });
 
         // Get uniform locations
-        this.locs = {
-            res: this.ctx.getUniformLocation(prog, "u_resolution"),
-        };
+        this.locs = { res: this.ctx.getUniformLocation(prog, "u_resolution") };
 
         // Make Buffers
-        this.bufferData = new Float32Array(50000 * 6);
-        this.uint32Data = new Uint32Array(this.bufferData.buffer);
+        this.f32 = new Float32Array(50000 * 6);
+        this.u32 = new Uint32Array(this.f32.buffer);
         this.init = false;
 
         /// Time properties
@@ -144,12 +174,12 @@ class CanvasJS extends HTMLCanvasElement {
 
     // Set background color
     set background(color) {
-        this.ctx.clearColor(...[
+        this.ctx.clearColor(
             ((color >> 24) & 0xFF) / 255, // R
             ((color >> 16) & 0xFF) / 255, // G
             ((color >> 8) & 0xFF) / 255, // B
             (color & 0xFF) / 255  // A
-        ]);
+        );
     }
 
     // 
@@ -169,12 +199,12 @@ class CanvasJS extends HTMLCanvasElement {
     // 1. Update Buffers
     updateBuffer(count) {
         const requiredLength = count * 6;
-        const isOverflow = requiredLength > this.bufferData.length;
+        const isOverflow = requiredLength > this.f32.length;
 
         if (isOverflow) {
             const newSize = Math.ceil(requiredLength * 1.5);
-            this.bufferData = new Float32Array(newSize);
-            this.uint32Data = new Uint32Array(this.bufferData.buffer);
+            this.f32 = new Float32Array(newSize);
+            this.u32 = new Uint32Array(this.f32.buffer);
         }
         return isOverflow;
     }
@@ -184,13 +214,12 @@ class CanvasJS extends HTMLCanvasElement {
         //
         this.ctx.bindBuffer(this.ctx.ARRAY_BUFFER, this.instanceBuffer);
         if (isOverflow || !this.init) {
-            this.ctx.bufferData(this.ctx.ARRAY_BUFFER, this.bufferData, this.ctx.DYNAMIC_DRAW);
+            this.ctx.bufferData(this.ctx.ARRAY_BUFFER, this.f32, this.ctx.DYNAMIC_DRAW);
             this.init = true;
         }
-        else this.ctx.bufferSubData(this.ctx.ARRAY_BUFFER, 0, this.bufferData.subarray(0, count * 6));
+        else this.ctx.bufferSubData(this.ctx.ARRAY_BUFFER, 0, this.f32, 0, count * 6);
 
         //
-        this.ctx.uniform2f(this.locs.res, this.width, this.height);
         this.ext.drawArraysInstancedANGLE(this.ctx.TRIANGLES, 0, 6, count);
     }
 
@@ -199,6 +228,7 @@ class CanvasJS extends HTMLCanvasElement {
         this.width = window.innerWidth;
         this.height = window.innerHeight;
         this.ctx.viewport(0, 0, this.width, this.height);
+        this.ctx.uniform2f(this.locs.res, this.width, this.height);
     }
 
     // Main Loop
@@ -216,7 +246,6 @@ class CanvasJS extends HTMLCanvasElement {
 
         requestAnimationFrame(this.run); // next frame
     }
-
 };
 customElements.define('canvas-js', CanvasJS, { extends: 'canvas' }); // Extend HTMLCanvasElement
 //

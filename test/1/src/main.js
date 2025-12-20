@@ -32,8 +32,8 @@ canvas.main = function () {
 
     const isOverflow = canvas.updateBuffer(particles.length)
     const [f32, u32] = particles.update(canvas);
-    canvas.bufferData.set(f32);
-    canvas.uint32Data.set(u32);
+    canvas.f32.set(f32);
+    canvas.u32.set(u32);
 
     st.textContent = `FPS: ${canvas.fps.toFixed(2)} Particles: ${f32.length/6}/${particles.count}`;
 
